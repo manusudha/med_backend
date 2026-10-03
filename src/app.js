@@ -10,7 +10,7 @@ const env = require('./config/env');
 const sanitize = require('./middleware/sanitize');
 const { notFound, errorHandler } = require('./middleware/error');
 const { HttpError } = require('./utils/http');
-
+const { connectDB } = require('./config/db');
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', env.TRUST_PROXY);
@@ -38,6 +38,17 @@ app.use(compression());
 app.use(express.json({ limit: '1mb' }));
 app.use(sanitize);
 app.use(morgan(env.isProd ? 'combined' : 'dev'));
+// Make sure MongoDB is connected before handling any API request.
+// Needed on Vercel (serverless); connectDB is cached, so it's cheap locally too.
+app.use('/api', async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    console.error('MongoDB connection failed:', err.message);
+    res.status(503).json({ message: 'Database unavailable. Please try again.' });
+  }
+});
 
 app.use('/api', rateLimit({
   windowMs: 15 * 60 * 1000,
